@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MineClone — HTML Minecraft</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html,body { width:100%; height:100%; overflow:hidden; background:#000;
+    font-family:'Courier New',monospace; user-select:none; }
+  #game { position:fixed; inset:0; }
+  canvas { display:block; }
+
+  /* ---------- overlays ---------- */
+  .overlay { position:fixed; inset:0; display:flex; flex-direction:column;
+    align-items:center; justify-content:center; z-index:50;
+    background:rgba(0,0,0,.55); color:#fff; }
+  .hidden { display:none !important; }
+
+  #title-screen h1 {
+    font-size:64px; letter-spacing:4px; color:#eee;
+    text-shadow:4px 4px 0 #3f3f3f, 8px 8px 0 rgba(0,0,0,.6);
+    font-weight:bold; transform:rotate(-2deg); margin-bottom:8px;
+  }
+  #title-screen h1 span { color:#8f8f8f; }
+  .subtitle { color:#ff0; font-style:italic; margin-bottom:36px; font-size:15px;
+    animation:pulse 1.2s ease-in-out infinite; }
+  @keyframes pulse { 50% { opacity:.4; } }
+
+  .mc-btn {
+    display:block; width:340px; margin:6px 0; padding:12px 0;
+    text-align:center; font-size:17px; font-weight:bold; color:#eee;
+    font-family:inherit; cursor:pointer; border:2px solid #000;
+    background:linear-gradient(#8f8f8f,#6f6f6f 45%,#5f5f5f);
+    box-shadow:inset 0 -4px 0 rgba(0,0,0,.35), inset 0 2px 0 rgba(255,255,255,.3);
+    text-shadow:2px 2px 0 rgba(0,0,0,.5);
+  }
+  .mc-btn:hover { background:linear-gradient(#7d9fd8,#5f7fb8 45%,#4f6fa8); color:#ffffa0; }
+  .mc-btn.small { width:220px; font-size:14px; padding:9px 0; }
+
+  .panel {
+    background:rgba(20,20,20,.92); border:3px solid #555; padding:24px 32px;
+    max-height:80vh; overflow-y:auto; box-shadow:0 0 0 2px #000;
+  }
+  .panel h2 { margin-bottom:14px; font-size:20px; letter-spacing:1px; }
+  .controls-grid { display:grid; grid-template-columns:auto 1fr; gap:6px 18px;
+    font-size:14px; line-height:1.5; margin-bottom:16px; }
+  .key { background:#333; border:1px solid #666; border-bottom:3px solid #666;
+    padding:1px 8px; border-radius:3px; font-weight:bold; white-space:nowrap;
+    text-align:center; }
+
+  /* ---------- HUD ---------- */
+  #hud { position:fixed; inset:0; pointer-events:none; z-index:10; }
+  #crosshair { position:absolute; left:50%; top:50%; width:22px; height:22px;
+    transform:translate(-50%,-50%); }
+  #crosshair::before,#crosshair::after { content:''; position:absolute;
+    background:rgba(255,255,255,.85); mix-blend-mode:difference; }
+  #crosshair::before { left:50%; top:0; width:2px; height:100%; transform:translateX(-50%); }
+  #crosshair::after { top:50%; left:0; height:2px; width:100%; transform:translateY(-50%); }
+
+  #hotbar { position:absolute; bottom:8px; left:50%; transform:translateX(-50%);
+    display:flex; background:rgba(0,0,0,.45); border:2px solid rgba(0,0,0,.7);
+    padding:3px; }
+  .slot { width:52px; height:52px; margin:0 1px; position:relative;
+    background:rgba(40,40,40,.55); border:2px solid #2a2a2a;
+    box-shadow:inset 0 0 0 1px rgba(255,255,255,.12); }
+  .slot.sel { border-color:#fff; box-shadow:0 0 0 2px rgba(255,255,255,.55),
+    inset 0 0 0 1px #fff; }
+  .slot canvas { width:44px; height:44px; image-rendering:pixelated;
+    position:absolute; left:2px; top:2px; }
+  .slot .num { position:absolute; top:1px; left:3px; font-size:10px;
+    color:#ccc; text-shadow:1px 1px 0 #000; }
+  .slot .cnt { position:absolute; bottom:1px; right:3px; font-size:12px;
+    font-weight:bold; color:#fff; text-shadow:1px 1px 0 #000; }
+  #block-name { position:absolute; bottom:74px; left:50%;
+    transform:translateX(-50%); font-size:15px; color:#fff;
+    text-shadow:2px 2px 0 #000; opacity:0; transition:opacity .8s; }
+
+  #debug { position:absolute; top:8px; left:8px; font-size:12px;
+    color:#fff; text-shadow:1px 1px 0 #000; line-height:1.55;
+    background:rgba(0,0,0,.25); padding:6px 10px; white-space:pre; }
+
+  #vignette-hurt { position:fixed; inset:0; pointer-events:none; z-index:9;
+    box-shadow:inset 0 0 120px rgba(180,0,0,0); transition:box-shadow .15s; }
+
+  /* ---------- inventory ---------- */
+  #inventory .panel { width:640px; }
+  #inv-grid { display:grid; grid-template-columns:repeat(9,1fr); gap:4px; }
+  .inv-item { width:56px; height:56px; background:#8b8b8b; cursor:pointer;
+    border:2px solid; border-color:#373737 #fff #fff #373737;
+    position:relative; display:flex; align-items:center; justify-content:center; }
+  .inv-item:hover { background:#a0a0a0; }
+  .inv-item canvas { width:40px; height:40px; image-rendering:pixelated; }
+  .inv-item .tip { position:absolute; bottom:105%; left:50%;
+    transform:translateX(-50%); background:rgba(16,0,16,.94); color:#fff;
+    padding:4px 10px; font-size:13px; white-space:nowrap; display:none;
+    border:1px solid #25015e; z-index:5; }
+  .inv-item:hover .tip { display:block; }
+
+  #seed-row { display:flex; gap:8px; margin-bottom:20px; }
+  #seed-input { width:220px; padding:9px; font-family:inherit; font-size:15px;
+    background:#1a1a1a; color:#eee; border:2px solid #555; }
+  #toast { position:fixed; top:18px; left:50%; transform:translateX(-50%);
+    z-index:60; background:rgba(0,0,0,.75); color:#ffe; padding:8px 22px;
+    font-size:14px; border:1px solid #666; opacity:0; transition:opacity .4s; }
+  #loading-bar { width:340px; height:14px; border:2px solid #666; margin-top:24px; }
+  #loading-fill { height:100%; width:0%; background:#7cbd4b; transition:width .1s; }
+</style>
+</head>
+<body>
+<div id="game"></div>
+
+<div id="hud" class="hidden">
+  <div id="crosshair"></div>
+  <div id="block-name"></div>
+  <div id="hotbar"></div>
+  <div id="debug" class="hidden"></div>
+</div>
+<div id="vignette-hurt"></div>
+
+<div id="title-screen" class="overlay">
+  <h1>MINE<span>CLONE</span></h1>
+  <div class="subtitle">100% HTML + JavaScript voxel engine!</div>
+  <div id="seed-row">
+    <input id="seed-input" placeholder="Seed (boş = rastgele)" maxlength="24">
+  </div>
+  <button class="mc-btn" id="btn-play">Oyna</button>
+  <button class="mc-btn" id="btn-continue">Kayıtlı Dünyayı Yükle</button>
+  <button class="mc-btn" id="btn-help">Kontroller</button>
+  <div id="loading-bar" class="hidden"><div id="loading-fill"></div></div>
+</div>
+
+<div id="pause-screen" class="overlay hidden">
+  <div class="panel" style="text-align:center">
+    <h2>Duraklatıldı</h2>
+    <button class="mc-btn" id="btn-resume">Oyuna Dön</button>
+    <button class="mc-btn" id="btn-help2">Kontroller</button>
+    <button class="mc-btn" id="btn-save">Dünyayı Kaydet</button>
+    <button class="mc-btn" id="btn-quit">Ana Menü</button>
+  </div>
+</div>
+
+<div id="help-screen" class="overlay hidden">
+  <div class="panel">
+    <h2>Kontroller</h2>
+    <div class="controls-grid">
+      <span class="key">W A S D</span><span>Hareket</span>
+      <span class="key">Mouse</span><span>Etrafa bak</span>
+      <span class="key">Sol Tık</span><span>Blok kır (TNT'yi ateşler!)</span>
+      <span class="key">Sağ Tık</span><span>Blok koy</span>
+      <span class="key">Orta Tık</span><span>Blok seç (pick block)</span>
+      <span class="key">1-9 / Tekerlek</span><span>Hotbar slotu</span>
+      <span class="key">Space</span><span>Zıpla / yüz / uçarken yüksel</span>
+      <span class="key">Shift</span><span>Koş / uçarken alçal</span>
+      <span class="key">F</span><span>Uçuş modu aç/kapa</span>
+      <span class="key">E</span><span>Envanter</span>
+      <span class="key">F3</span><span>Debug bilgisi</span>
+      <span class="key">M</span><span>Ses aç/kapa</span>
+      <span class="key">- / +</span><span>Görüş mesafesi</span>
+      <span class="key">Esc</span><span>Duraklat</span>
+    </div>
+    <button class="mc-btn small" id="btn-help-back" style="margin:0 auto">Geri</button>
+  </div>
+</div>
+
+<div id="inventory" class="overlay hidden">
+  <div class="panel">
+    <h2>Envanter — bloğu seç, hotbar'a eklenir</h2>
+    <div id="inv-grid"></div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script src="three.min.js"></script>
+<script src="game.js"></script>
+</body>
+</html>
