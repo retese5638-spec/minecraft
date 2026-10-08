@@ -83,6 +83,19 @@
   #arm { position:absolute; right:0; bottom:0; width:300px; height:300px;
     image-rendering:pixelated; }
 
+  #vitals { position:absolute; bottom:66px; left:50%; transform:translateX(-50%);
+    width:196px; height:44px; image-rendering:pixelated;
+    filter:drop-shadow(1px 1px 0 rgba(0,0,0,.8)); }
+
+  .set-row { display:grid; grid-template-columns:130px 200px; gap:10px;
+    align-items:center; margin:10px 0; font-size:14px; }
+  .set-row input[type=range] { width:200px; accent-color:#7cbd4b; }
+  .set-row input[type=checkbox] { width:20px; height:20px; accent-color:#7cbd4b; }
+  .set-lbl { color:#ccc; }
+
+  #death-screen h1 { font-size:56px; color:#c33; text-shadow:4px 4px 0 #000;
+    margin-bottom:30px; letter-spacing:3px; }
+
   #vignette-hurt { position:fixed; inset:0; pointer-events:none; z-index:9;
     box-shadow:inset 0 0 120px rgba(180,0,0,0); transition:box-shadow .15s; }
 
@@ -118,6 +131,7 @@
   <div id="block-name"></div>
   <div id="hotbar"></div>
   <div id="debug" class="hidden"></div>
+  <canvas id="vitals"></canvas>
   <canvas id="arm"></canvas>
 </div>
 <div id="vignette-hurt"></div>
@@ -128,8 +142,10 @@
   <div id="seed-row">
     <input id="seed-input" placeholder="Seed (boş = rastgele)" maxlength="24">
   </div>
-  <button class="mc-btn" id="btn-play">Oyna</button>
+  <button class="mc-btn" id="btn-play">Hayatta Kalma</button>
+  <button class="mc-btn" id="btn-creative">Yaratıcı (Sınırsız)</button>
   <button class="mc-btn" id="btn-continue">Kayıtlı Dünyayı Yükle</button>
+  <button class="mc-btn" id="btn-settings">Ayarlar</button>
   <button class="mc-btn" id="btn-help">Kontroller</button>
   <div id="loading-bar" class="hidden"><div id="loading-fill"></div></div>
 </div>
@@ -138,6 +154,7 @@
   <div class="panel" style="text-align:center">
     <h2>Duraklatıldı</h2>
     <button class="mc-btn" id="btn-resume">Oyuna Dön</button>
+    <button class="mc-btn" id="btn-settings2">Ayarlar</button>
     <button class="mc-btn" id="btn-help2">Kontroller</button>
     <button class="mc-btn" id="btn-save">Dünyayı Kaydet</button>
     <button class="mc-btn" id="btn-quit">Ana Menü</button>
@@ -156,7 +173,8 @@
       <span class="key">1-9 / Tekerlek</span><span>Hotbar slotu</span>
       <span class="key">Space</span><span>Zıpla / yüz / uçarken yüksel</span>
       <span class="key">Shift</span><span>Koş / uçarken alçal</span>
-      <span class="key">F</span><span>Uçuş modu aç/kapa</span>
+      <span class="key">F</span><span>Uçuş modu aç/kapa (yaratıcı)</span>
+      <span class="key">Q</span><span>Domuz eti ye (hayatta kalma)</span>
       <span class="key">E</span><span>Envanter</span>
       <span class="key">F3</span><span>Debug bilgisi</span>
       <span class="key">M</span><span>Ses aç/kapa</span>
@@ -171,6 +189,27 @@
   <div class="panel">
     <h2>Envanter — bloğu seç, hotbar'a eklenir</h2>
     <div id="inv-grid"></div>
+  </div>
+</div>
+
+<div id="death-screen" class="overlay hidden">
+  <h1>ÖLDÜN!</h1>
+  <button class="mc-btn" id="btn-respawn">Yeniden Doğ</button>
+  <button class="mc-btn" id="btn-death-menu">Ana Menü</button>
+</div>
+
+<div id="settings-screen" class="overlay hidden">
+  <div class="panel">
+    <h2>Ayarlar</h2>
+    <div class="set-row"><span class="set-lbl">Ses Seviyesi</span>
+      <input type="range" id="set-vol" min="0" max="100" value="80"></div>
+    <div class="set-row"><span class="set-lbl">Fare Hassasiyeti</span>
+      <input type="range" id="set-sens" min="30" max="200" value="100"></div>
+    <div class="set-row"><span class="set-lbl">Görüş Mesafesi</span>
+      <input type="range" id="set-vd" min="2" max="8" value="5"></div>
+    <div class="set-row"><span class="set-lbl">Zombiler (gece)</span>
+      <input type="checkbox" id="set-zomb" checked></div>
+    <button class="mc-btn small" id="btn-settings-back" style="margin:14px auto 0">Geri</button>
   </div>
 </div>
 
