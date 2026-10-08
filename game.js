@@ -761,6 +761,10 @@ function explode(x,y,z){
     player.vel.y+=f*.6;
     flashHurt();
   }
+  for(const pig of pigs.slice()){
+    const pd=pig.pos.distanceTo(new THREE.Vector3(x,y,z));
+    if(pd<6)pig.hurt(Math.ceil((6-pd)*2.5),{x,y,z});
+  }
 }
 let hurtT=0;
 function flashHurt(){
@@ -811,10 +815,12 @@ class Pig{
   constructor(x,y,z){
     this.pos=new THREE.Vector3(x,y,z);this.vel=new THREE.Vector3();
     this.w=.8;this.h=.9;this.yaw=0;this.state=0;this.timer=0;this.onGround=false;
+    this.hp=8;this.hurtT=0;this.panicT=0;this.dead=false;
     const pink=0xf2a0a0,dark=0xd98f8f;
     const m=new THREE.MeshLambertMaterial({color:pink});
     const md=new THREE.MeshLambertMaterial({color:dark});
     const mb=new THREE.MeshLambertMaterial({color:0x1a1a1a});
+    this.mats=[m,md,mb];
     const g=this.g=new THREE.Group();
     const body=new THREE.Mesh(new THREE.BoxGeometry(.62,.5,1),m);body.position.y=.62;g.add(body);
     const head=new THREE.Mesh(new THREE.BoxGeometry(.44,.4,.4),m);head.position.set(0,.78,.62);g.add(head);
@@ -831,9 +837,18 @@ class Pig{
     scene.add(g);
   }
   step(dt){
+    if(this.dead)return;
     this.timer-=dt;
-    if(this.timer<=0){this.state=Math.random()<.55?1:0;this.yaw=Math.random()*Math.PI*2;this.timer=1+Math.random()*3;}
-    if(this.state===1){
+    if(this.hurtT>0){this.hurtT-=dt;if(this.hurtT<=0)for(const mt of this.mats)mt.emissive.setHex(0);}
+    this.panicT=Math.max(0,this.panicT-dt);
+    if(this.timer<=0&&this.panicT<=0){this.state=Math.random()<.55?1:0;this.yaw=Math.random()*Math.PI*2;this.timer=1+Math.random()*3;}
+    if(this.panicT>0){
+      // flee from the player
+      const dx=this.pos.x-player.pos.x,dz=this.pos.z-player.pos.z;
+      const l=Math.hypot(dx,dz)||1;
+      this.vel.x=dx/l*3.7;this.vel.z=dz/l*3.7;
+      this.yaw=Math.atan2(-this.vel.x,-this.vel.z);
+    }else if(this.state===1){
       const s=1.3;
       this.vel.x=-Math.sin(this.yaw)*s;this.vel.z=-Math.cos(this.yaw)*s;
     }else{this.vel.x=0;this.vel.z=0;}
@@ -844,14 +859,94 @@ class Pig{
     collideAxis(this,2,this.vel.z*dt);
     collideAxis(this,1,this.vel.y*dt);
     // walked into a wall -> hop
-    if(this.state===1&&this.onGround&&(Math.abs(this.pos.x-ox)<Math.abs(this.vel.x*dt)*.3||Math.abs(this.pos.z-oz)<Math.abs(this.vel.z*dt)*.3))
+    if((this.state===1||this.panicT>0)&&this.onGround&&(Math.abs(this.pos.x-ox)<Math.abs(this.vel.x*dt)*.3||Math.abs(this.pos.z-oz)<Math.abs(this.vel.z*dt)*.3))
       this.vel.y=7;
     const t=performance.now()*.006;
-    const sw=this.state===1?Math.sin(t*6)*.5:0;
+    const sw=(this.state===1||this.panicT>0)?Math.sin(t*6)*.5:0;
     this.legs[0].rotation.x=sw;this.legs[3].rotation.x=sw;
     this.legs[1].rotation.x=-sw;this.legs[2].rotation.x=-sw;
     this.g.position.copy(this.pos);this.g.rotation.y=this.yaw;
   }
+  hurt(dmg,src){
+    if(this.dead)return;
+    this.hp-=dmg;this.hurtT=.25;this.panicT=2.5;
+    for(const mt of this.mats)mt.emissive.setHex(0xcc2222);
+    snd('oink');
+    if(src){
+      const dx=this.pos.x-src.x,dz=this.pos.z-src.z,l=Math.hypot(dx,dz)||1;
+      this.vel.x=dx/l*5.5;this.vel.z=dz/l*5.5;this.vel.y=4.2;
+    }
+    if(this.hp<=0)this.die();
+  }
+  die(){
+    this.dead=true;
+    scene.remove(this.g);
+    burst(this.pos.x-.5,this.pos.y,this.pos.z-.5,.95,.6,.6,36,3.5);
+    burst(this.pos.x-.5,this.pos.y,this.pos.z-.5,1,1,1,14,2);
+    const i=pigs.indexOf(this);if(i>=0)pigs.splice(i,1);
+  }
+}
+
+// ---- entity picking (attack) ----
+function raycastPigs(maxD){
+  const o=camera.position;camera.getWorldDirection(camDir);const d=camDir;
+  let best=null,bestT=maxD;
+  for(const p of pigs){
+    if(p.dead)continue;
+    const mnx=p.pos.x-p.w/2,mxx=p.pos.x+p.w/2,
+          mny=p.pos.y,mxy=p.pos.y+p.h,
+          mnz=p.pos.z-p.w/2,mxz=p.pos.z+p.w/2;
+    let t0=0,t1=bestT,ok=true;
+    for(const a of['x','y','z']){
+      const mn=a==='x'?mnx:a==='y'?mny:mnz,mx=a==='x'?mxx:a==='y'?mxy:mxz;
+      const dd=Math.abs(d[a])<1e-9?1e-9:d[a];
+      let ta=(mn-o[a])/dd,tb=(mx-o[a])/dd;
+      if(ta>tb){const q=ta;ta=tb;tb=q;}
+      t0=Math.max(t0,ta);t1=Math.min(t1,tb);
+      if(t0>t1){ok=false;break;}
+    }
+    if(ok&&t0<bestT&&t0>0){bestT=t0;best=p;}
+  }
+  return best;
+}
+
+// ---- first-person arm ----
+let armSwing=0,walkPhase=0,armCtx=null,armCv=null,armHasItem=true;
+const armTex=document.createElement('canvas');armTex.width=16;armTex.height=56;
+(function(){
+  const c=armTex.getContext('2d');
+  c.fillStyle='#b5835a';c.fillRect(0,0,16,44);   // skin
+  c.fillStyle='#9c6f4c';c.fillRect(0,0,16,4);    // knuckles shade
+  c.fillStyle='#00aaaa';c.fillRect(0,44,16,12);  // shirt sleeve
+  c.fillStyle='#008c8c';c.fillRect(0,44,16,2);
+})();
+const armItemCv=document.createElement('canvas');armItemCv.width=armItemCv.height=44;
+function updateArmItem(){
+  const id=hotbar[selected];
+  armHasItem=!!(BLOCKS[id]&&BLOCKS[id].place);
+  if(armHasItem)drawIcon(armItemCv,id);
+}
+function initArm(){
+  armCv=$('arm');if(!armCv)return;
+  armCv.width=armCv.height=180;
+  armCtx=armCv.getContext('2d');armCtx.imageSmoothingEnabled=false;
+}
+function drawArm(dt){
+  if(!armCtx)return;
+  const c=armCtx,W=armCv.width,H=armCv.height;
+  c.clearRect(0,0,W,H);
+  if(!gameActive)return;
+  const spd=Math.hypot(player.vel.x,player.vel.z);
+  if(player.onGround&&spd>.5)walkPhase+=dt*(2+spd);
+  const bobY=Math.abs(Math.sin(walkPhase))*3,bobX=Math.cos(walkPhase)*2;
+  if(armSwing>0)armSwing=Math.max(0,armSwing-dt*3.5);
+  const p=1-armSwing,sw=armSwing>0?Math.sin(p*Math.PI):0;
+  c.save();
+  c.translate(W*.62+bobX-sw*30,H*.74+bobY+sw*16);
+  c.rotate(-.3-sw*.8);
+  if(armHasItem)c.drawImage(armItemCv,-34,-54,64,64);
+  c.drawImage(armTex,-26,6,52,182);
+  c.restore();
 }
 function spawnPigs(px,pz,n){
   for(let i=0;i<n;i++){
@@ -891,6 +986,11 @@ function snd(type){
       o.frequency.setValueAtTime(300,t);o.frequency.linearRampToValueAtTime(900,t+.5);
       o.connect(g);g.gain.setValueAtTime(.07,t);
       g.gain.exponentialRampToValueAtTime(.001,t+.6);o.start(t);o.stop(t+.6);
+    }else if(type==='oink'){
+      const o=c.createOscillator();o.type='triangle';
+      o.frequency.setValueAtTime(240,t);o.frequency.exponentialRampToValueAtTime(110,t+.16);
+      o.connect(g);g.gain.setValueAtTime(.3,t);
+      g.gain.exponentialRampToValueAtTime(.001,t+.18);o.start(t);o.stop(t+.2);
     }else if(type==='explode'){
       const buf=c.createBuffer(1,c.sampleRate*.7,c.sampleRate);
       const d=buf.getChannelData(0);
@@ -941,6 +1041,7 @@ function renderHotbar(){
   nameEl.textContent=BLOCKS[hotbar[selected]].name;
   nameEl.style.opacity=1;
   clearTimeout(nameEl._t);nameEl._t=setTimeout(()=>nameEl.style.opacity=0,1400);
+  updateArmItem();
 }
 function buildInventory(){
   const grid=$('inv-grid');grid.innerHTML='';
@@ -1042,9 +1143,9 @@ function initInput(){
   });
   cv.addEventListener('mousedown',e=>{
     if(document.pointerLockElement!==cv)return;
-    if(e.button===0)lDown=true;
+    if(e.button===0){lDown=true;armSwing=1;}
     if(e.button===1){e.preventDefault();pickBlock(raycastVoxel());}
-    if(e.button===2)rDown=true;
+    if(e.button===2){rDown=true;armSwing=1;}
   });
   addEventListener('mouseup',e=>{if(e.button===0)lDown=false;if(e.button===2)rDown=false;});
   addEventListener('contextmenu',e=>e.preventDefault());
@@ -1163,8 +1264,14 @@ function loop(t){
     actT-=dt;
     if(lDown||rDown){
       if(actT<=0){
-        const h=raycastVoxel();
-        if(lDown)breakBlock(h);else placeBlock(h);
+        armSwing=1;
+        if(lDown){
+          const bh=raycastVoxel();
+          let bd=7;
+          if(bh)bd=camera.position.distanceTo(new THREE.Vector3(bh.x+.5,bh.y+.5,bh.z+.5));
+          const pig=raycastPigs(Math.min(bd,4));
+          if(pig)pig.hurt(2,player.pos);else breakBlock(bh);
+        }else placeBlock(raycastVoxel());
         actT=lDown?.16:.22;
       }
     }else actT=0;
@@ -1186,6 +1293,7 @@ function loop(t){
   if(hurtT>0){hurtT-=dt;if(hurtT<=0)$('vignette-hurt').style.boxShadow='inset 0 0 120px rgba(180,0,0,0)';}
   saveT+=dt;if(saveT>20&&gameActive){saveT=0;if(edits.size)saveWorld();}
   renderer.render(scene,camera);
+  drawArm(dt);
 }
 
 // ================= BOOT =================
@@ -1193,6 +1301,7 @@ buildAtlas();
 initThree();
 initHL();
 initParticles();
+initArm();
 initInput();
 wireMenus();
 buildInventory();

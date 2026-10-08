@@ -22,7 +22,10 @@ python3 -m http.server 8080   # → http://localhost:8080
 - **Ambient occlusion** — vertex bazlı yumuşak gölgelendirme (0fps algoritması)
 - **Madencilik** — kömür, demir, altın, elmas cevherleri derinlikte
 - **TNT** — sol tıkla ateşle, zincirleme patlama, krater, geri tepme
-- **Domuz mobları** — gezinen, fizikli, animasyonlu yaratıklar
+- **Steve kolu** — birinci şahıs el: tutulan bloğu gösterir, yürürken sallanır,
+  vururken/kırarken sallanma animasyonu
+- **Domuz mobları** — gezinen, fizikli, animasyonlu yaratıklar; sol tıkla vur
+  (hasar + kırmızı yanıp sönme + geri tepme + panik kaçışı + ölüm parçacıkları)
 - **Gündüz/gece döngüsü** — güneş/ay/yıldızlar, alacakaranlık renkleri, bulutlar
 - **Su & yüzme** — yarı saydam su, sualtı sisi, lav blokları
 - **Partiküller**, WebAudio ile sentezlenmiş sesler (dosya yok, tamamı kod)
