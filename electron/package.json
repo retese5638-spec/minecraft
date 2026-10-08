@@ -1,0 +1,7 @@
+{
+  "name": "mineclone",
+  "version": "1.0.0",
+  "description": "MineClone - HTML5 Minecraft klonu (Electron)",
+  "main": "main.js",
+  "license": "MIT"
+}
