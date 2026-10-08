@@ -59,13 +59,13 @@ class Perlin{
 const B={AIR:0,GRASS:1,DIRT:2,STONE:3,SAND:4,LOG:5,LEAVES:6,WATER:7,GLASS:8,
 BRICK:9,PLANKS:10,BEDROCK:11,COAL:12,IRON:13,GOLD:14,DIAMOND:15,COBBLE:16,
 FLOWER_R:17,FLOWER_Y:18,TALLGRASS:19,TNT:20,LAVA:21,SNOW:22,CACTUS:23,
-SANDSTONE:24,GRAVEL:25};
+SANDSTONE:24,GRAVEL:25,WORKBENCH:26};
 
 // tile indices in the atlas
 const T={GRASS_T:0,GRASS_S:1,DIRT:2,STONE:3,SAND:4,LOG_S:5,LOG_T:6,LEAVES:7,
 WATER:8,GLASS:9,BRICK:10,PLANKS:11,BEDROCK:12,COAL:13,IRON:14,GOLD:15,DIAMOND:16,
 COBBLE:17,FLOWER_R:18,FLOWER_Y:19,TALLGRASS:20,TNT_S:21,TNT_T:22,LAVA:23,SNOW:24,
-CACTUS_S:25,CACTUS_T:26,SANDSTONE:27,GRAVEL:28};
+CACTUS_S:25,CACTUS_T:26,SANDSTONE:27,GRAVEL:28,WB_S:29,WB_T:30};
 
 // def: name, tiles(all | {t,b,s}), solid, opaque, cross, liquid
 const BLOCKS=[];
@@ -96,6 +96,14 @@ defBlock(B.SNOW,'Kar',T.SNOW);
 defBlock(B.CACTUS,'Kaktüs',{t:T.CACTUS_T,b:T.CACTUS_T,s:T.CACTUS_S});
 defBlock(B.SANDSTONE,'Kumtaşı',T.SANDSTONE);
 defBlock(B.GRAVEL,'Çakıl',T.GRAVEL);
+defBlock(B.WORKBENCH,'Çalışma Masası',{t:T.WB_T,b:T.PLANKS,s:T.WB_S});
+
+// survival kırma süreleri (saniye); -1 = kırılamaz
+const HARD={[B.GRASS]:.6,[B.DIRT]:.5,[B.SAND]:.5,[B.GRAVEL]:.5,[B.SNOW]:.4,
+  [B.LOG]:2,[B.PLANKS]:2,[B.WORKBENCH]:2,[B.STONE]:4,[B.COBBLE]:4.5,
+  [B.SANDSTONE]:3.5,[B.BRICK]:5,[B.BEDROCK]:-1,[B.COAL]:4.5,[B.IRON]:5,
+  [B.GOLD]:5,[B.DIAMOND]:5.5,[B.GLASS]:.4,[B.TNT]:0,[B.LEAVES]:.25};
+function blockHard(id){const h=HARD[id];if(h!==undefined)return h;const d=BLOCKS[id];return d&&d.cross?.05:1;}
 
 const isOpaque=id=>BLOCKS[id]&&BLOCKS[id].opaque;
 const isSolid =id=>BLOCKS[id]&&BLOCKS[id].solid;
@@ -202,6 +210,15 @@ function buildAtlas(){
   // gravel
   fill(T.GRAVEL,'#8f8a83');
   for(let y=0;y<16;y++)for(let x=0;x<16;x++){if(R()<.6)px(T.GRAVEL,x,y,['#7a756e','#a09a91','#6b655e','#b0a89e','#8a7f72'][(R()*5)|0]);}
+
+  // workbench: planks base + craft grid lines
+  fill(T.WB_S,'#a98a54');
+  for(let y=0;y<16;y++)for(let x=0;x<16;x++){if(R()<.25)px(T.WB_S,x,y,['#9c7d4a','#b5945c','#8f7040'][(R()*3)|0]);}
+  for(let i=0;i<16;i++){px(T.WB_S,i,7,'#5d4324');px(T.WB_S,i,8,'#5d4324');px(T.WB_S,7,i,'#5d4324');px(T.WB_S,8,i,'#5d4324');}
+  px(T.WB_S,2,2,'#3a2c18');px(T.WB_S,13,2,'#3a2c18');px(T.WB_S,2,13,'#3a2c18');px(T.WB_S,13,13,'#3a2c18');
+  fill(T.WB_T,'#b5945c');
+  for(let y=0;y<16;y++)for(let x=0;x<16;x++){if(R()<.2)px(T.WB_T,x,y,['#9c7d4a','#c9a86a','#8f7040'][(R()*3)|0]);}
+  for(let i=0;i<16;i++){px(T.WB_T,i,5,'#5d4324');px(T.WB_T,i,10,'#5d4324');px(T.WB_T,5,i,'#5d4324');px(T.WB_T,10,i,'#5d4324');}
 
   // split tiles into standalone canvases for HUD icons
   for(let i=0;i<ATLAS_C*ATLAS_R;i++){
@@ -807,7 +824,7 @@ function flashHurt(){
 }
 
 // ---- block actions ----
-let lDown=false,rDown=false,actT=0;
+let lDown=false,rDown=false,actT=0,mining=null;
 function breakBlock(h){
   if(!h)return;
   const id=getBlock(h.x,h.y,h.z);
@@ -817,12 +834,16 @@ function breakBlock(h){
   burst(h.x,h.y,h.z,c[0],c[1],c[2],22,3.5);
   setBlock(h.x,h.y,h.z,B.AIR);
   snd('break',id);
+  if(gameMode==='survival'&&BLOCKS[id].place)
+    spawnItem(new THREE.Vector3(h.x+.5,h.y+.5,h.z+.5),blockDropTex(id),()=>addBlock(id,1));
 }
 function placeBlock(h){
   if(!h)return;
   const x=h.x+h.nx,y=h.y+h.ny,z=h.z+h.nz;
   if(getBlock(x,y,z)!==B.AIR&&getBlock(x,y,z)!==B.WATER&&getBlock(x,y,z)!==B.LAVA)return;
   const id=hotbar[selected],d=BLOCKS[id];
+  if(!id||id===B.AIR)return;
+  if(gameMode==='survival'&&invCnt[selected]<=0){toast('Blok yok — önce kır!');snd('click');return;}
   if(d.solid){
     // don't place inside the player
     const hw=player.w/2;
@@ -831,7 +852,9 @@ function placeBlock(h){
        y+1>player.pos.y&&y<player.pos.y+player.h)return;
   }
   setBlock(x,y,z,id);
+  if(gameMode==='survival')invCnt[selected]--;
   snd('place',id);
+  renderHotbar();
 }
 function pickBlock(h){
   if(!h)return;
@@ -995,7 +1018,7 @@ function isDay(){return Math.sin(worldTime*Math.PI*2-Math.PI/2)>0.1;}
 function isNight(){return Math.sin(worldTime*Math.PI*2-Math.PI/2)<-0.05;}
 
 function playerDamage(n,sx,sz){
-  if(gameMode!=='survival'||!gameActive)return;
+  if(gameMode!=='survival'||!gameActive||player.dead)return;
   player.hp-=n;flashHurt();snd('hurt');vitDirty=true;
   if(sx!==undefined){
     const dx=player.pos.x-sx,dz=player.pos.z-sz,l=Math.hypot(dx,dz)||1;
@@ -1004,13 +1027,15 @@ function playerDamage(n,sx,sz){
   if(player.hp<=0)playerDie();
 }
 function playerDie(){
+  player.dead=true;
+  mining=null;hideProg();lDown=rDown=false;
   $('death-screen').classList.remove('hidden');
   document.exitPointerLock();
 }
 function respawn(){
   player.pos.set(worldSpawn[0],worldSpawn[1],worldSpawn[2]);
   player.vel.set(0,0,0);player.hp=20;player.food=20;player.air=8;
-  player.fallDist=0;player.pork=0;
+  player.fallDist=0;player.pork=0;player.dead=false;
   for(const z of zombies.slice())z.remove();
   $('death-screen').classList.add('hidden');
   lockPointer();vitDirty=true;
@@ -1053,8 +1078,22 @@ function updateVitals(){
   }
 }
 
-// ---- pork pickups ----
-const pickups=[];let porkTex=null;
+// ---- item pickups (pork + dropped blocks) ----
+const pickups=[];let porkTex=null;const itemTexCache={};
+function spawnItem(pos,tex,onTake){
+  const s=new THREE.Sprite(new THREE.SpriteMaterial({map:tex}));
+  s.scale.set(.5,.5,1);
+  s.position.set(pos.x,pos.y+.4,pos.z);scene.add(s);
+  pickups.push({spr:s,x:pos.x,y:pos.y+.4,z:pos.z,t:60,onTake});
+}
+function blockDropTex(id){
+  if(!itemTexCache[id]){
+    const c=document.createElement('canvas');c.width=c.height=44;
+    drawIcon(c,id);itemTexCache[id]=new THREE.CanvasTexture(c);
+    itemTexCache[id].magFilter=THREE.NearestFilter;
+  }
+  return itemTexCache[id];
+}
 function getPorkTex(){
   if(porkTex)return porkTex;
   const c=document.createElement('canvas');c.width=c.height=16;
@@ -1066,10 +1105,7 @@ function getPorkTex(){
   return porkTex;
 }
 function spawnPork(pos){
-  const s=new THREE.Sprite(new THREE.SpriteMaterial({map:getPorkTex()}));
-  s.scale.set(.5,.5,1);
-  s.position.set(pos.x,pos.y+.6,pos.z);scene.add(s);
-  pickups.push({spr:s,x:pos.x,y:pos.y+.5,z:pos.z,t:60});
+  spawnItem(pos,getPorkTex(),()=>{player.pork++;vitDirty=true;});
 }
 function updatePickups(dt){
   for(let i=pickups.length-1;i>=0;i--){
@@ -1077,7 +1113,7 @@ function updatePickups(dt){
     p.spr.position.y=p.y+Math.sin(performance.now()*.004)*.1;
     const take=gameMode==='survival'&&Math.abs(player.pos.x-p.x)<1.1&&
       Math.abs(player.pos.z-p.z)<1.1&&p.y>player.pos.y-1&&p.y<player.pos.y+2;
-    if(take){player.pork++;snd('pickup');vitDirty=true;}
+    if(take){p.onTake();snd('pickup');}
     if(take||p.t<=0){scene.remove(p.spr);pickups.splice(i,1);}
   }
 }
@@ -1294,7 +1330,9 @@ function renderHotbar(){
     s.innerHTML=`<span class="num">${i+1}</span>`;
     const cv=document.createElement('canvas');cv.width=cv.height=44;
     drawIcon(cv,id);s.appendChild(cv);
-    const cnt=document.createElement('span');cnt.className='cnt';cnt.textContent='∞';
+    if(gameMode==='survival'&&invCnt[i]<=0)cv.style.opacity=.35;
+    const cnt=document.createElement('span');cnt.className='cnt';
+    cnt.textContent=gameMode==='survival'?invCnt[i]:'∞';
     s.appendChild(cnt);
     s.onclick=()=>{if(invOpen){selected=i;renderHotbar();}};
     bar.appendChild(s);
@@ -1318,6 +1356,75 @@ function buildInventory(){
     grid.appendChild(it);
   }
 }
+// ---- inventory counts + crafting ----
+const invCnt=new Array(9).fill(0);
+function addBlock(id,n){
+  for(let i=0;i<9;i++)if(hotbar[i]===id){invCnt[i]+=n;renderHotbar();return;}
+  for(let i=0;i<9;i++)if(invCnt[i]===0){hotbar[i]=id;invCnt[i]=n;renderHotbar();return;}
+  invCnt[selected]+=n;renderHotbar();
+}
+const craft=[0,0,0,0];
+let craftSlots=[],craftOutEl=null;
+function initCraft(){
+  const g=$('craft-grid');if(!g)return;
+  g.innerHTML='';craftSlots=[];
+  for(let i=0;i<4;i++){
+    const s=document.createElement('div');s.className='inv-item';
+    s.onclick=()=>craftClick(i);g.appendChild(s);craftSlots.push(s);
+  }
+  craftOutEl=$('craft-out');
+  if(craftOutEl)craftOutEl.onclick=craftTake;
+}
+function craftClick(i){
+  if(craft[i]){
+    if(gameMode==='survival')addBlock(craft[i],1);
+    craft[i]=0;
+  }else{
+    const id=hotbar[selected];
+    if(!id||id===B.AIR)return;
+    if(gameMode==='survival'&&invCnt[selected]<=0){toast('Blok yok');return;}
+    craft[i]=id;
+    if(gameMode==='survival'){invCnt[selected]--;renderHotbar();}
+  }
+  snd('click');updateCraft();
+}
+function craftResult(){
+  const items=craft.filter(x=>x);
+  if(items.length===1&&items[0]===B.LOG)return{id:B.PLANKS,c:4};
+  if(items.length===4&&items.every(x=>x===B.PLANKS))return{id:B.WORKBENCH,c:1};
+  if(items.length===4&&items.every(x=>x===B.STONE))return{id:B.BRICK,c:2};
+  return null;
+}
+function updateCraft(){
+  for(let i=0;i<4;i++){
+    const s=craftSlots[i];s.innerHTML='';
+    if(craft[i]){
+      const cv=document.createElement('canvas');cv.width=cv.height=40;
+      drawIcon(cv,craft[i]);s.appendChild(cv);
+    }
+  }
+  craftOutEl.innerHTML='';
+  const r=craftResult();
+  if(r){
+    const cv=document.createElement('canvas');cv.width=cv.height=40;
+    drawIcon(cv,r.id);craftOutEl.appendChild(cv);
+    const c=document.createElement('span');c.className='cnt';c.textContent='x'+r.c;
+    c.style.cssText='position:absolute;bottom:1px;right:3px;font-size:12px;font-weight:bold;color:#fff;text-shadow:1px 1px 0 #000';
+    craftOutEl.appendChild(c);
+  }
+}
+function craftTake(){
+  const r=craftResult();if(!r)return;
+  craft.fill(0);addBlock(r.id,r.c);snd('pickup');updateCraft();
+}
+
+function setProg(p){
+  const e=$('break-prog');if(!e)return;
+  e.style.display='block';
+  $('break-prog-fill').style.width=Math.min(100,p*100)+'%';
+}
+function hideProg(){const e=$('break-prog');if(e)e.style.display='none';}
+
 function toast(msg){
   const t=$('toast');t.textContent=msg;t.style.opacity=1;
   clearTimeout(t._t);t._t=setTimeout(()=>t.style.opacity=0,2200);
@@ -1330,6 +1437,7 @@ function saveWorld(){
     localStorage.setItem(SAVE_KEY,JSON.stringify({
       seed,time:worldTime,mode:gameMode,
       hp:player.hp,food:player.food,pork:player.pork,
+      hot:hotbar.slice(),inv:invCnt.slice(),
       pos:[player.pos.x,player.pos.y,player.pos.z,player.yaw,player.pitch],
       edits:Object.fromEntries(edits),
     }));
@@ -1379,6 +1487,8 @@ async function generateWorld(seedVal,saveData){
     if(saveData.hp!==undefined)player.hp=saveData.hp;
     if(saveData.food!==undefined)player.food=saveData.food;
     if(saveData.pork!==undefined)player.pork=saveData.pork;
+    if(saveData.hot&&saveData.hot.length===9)saveData.hot.forEach((id,i)=>hotbar[i]=id);
+    if(saveData.inv&&saveData.inv.length===9)saveData.inv.forEach((n,i)=>invCnt[i]=n);
   }else{
     // find the highest solid block at origin so we never drop into a cave mouth
     let sy=WORLD_H-1;
@@ -1386,7 +1496,8 @@ async function generateWorld(seedVal,saveData){
     player.pos.set(.5,sy+1.5,.5);player.yaw=0;player.pitch=-.15;
     worldTime=.32;
     worldSpawn=[.5,sy+1.5,.5];
-    player.hp=20;player.food=20;player.air=8;player.pork=0;
+    player.hp=20;player.food=20;player.air=8;player.pork=0;player.dead=false;
+    invCnt.fill(0);craft.fill(0);mining=null;hideProg();
   }
   player.vel.set(0,0,0);
   spawnPigs(0,0,9);
@@ -1400,6 +1511,9 @@ function initInput(){
     keys[e.code.toLowerCase()]=true;
     if(e.code==='Space')e.preventDefault();
     if(!gameActive)return;
+    if((player.dead||!$('pause-screen').classList.contains('hidden')||
+        !$('settings-screen').classList.contains('hidden')||
+        !$('help-screen').classList.contains('hidden'))&&e.code!=='F3'&&e.code!=='F4')return;
     if(e.code.startsWith('Digit')){const n=+e.code[5];if(n>=1&&n<=9){selected=n-1;renderHotbar();}}
     if(e.code==='KeyF'){player.fly=!player.fly;toast(player.fly?'Uçuş: AÇIK':'Uçuş: KAPALI');}
     if(e.code==='KeyM'){muted=!muted;toast(muted?'Ses: KAPALI':'Ses: AÇIK');}
@@ -1438,8 +1552,9 @@ function initInput(){
     player.pitch=Math.max(-1.55,Math.min(1.55,player.pitch));
   });
   document.addEventListener('pointerlockchange',()=>{
-    if(document.pointerLockElement!==cv&&gameActive&&!invOpen){
+    if(document.pointerLockElement!==cv&&gameActive&&!invOpen&&!player.dead){
       $('pause-screen').classList.remove('hidden');
+      lDown=rDown=false;mining=null;hideProg();
     }
   });
 }
@@ -1499,7 +1614,6 @@ async function start(load,mode){
 function lerp3(c1,c2,t){return[c1[0]+(c2[0]-c1[0])*t,c1[1]+(c2[1]-c1[1])*t,c1[2]+(c2[2]-c1[2])*t];}
 const SKY_DAY=[.49,.71,1],SKY_NIGHT=[.02,.03,.09],SKY_SET=[.98,.6,.3];
 function updateSky(dt){
-  worldTime=(worldTime+dt/DAY_LEN)%1;
   const a=worldTime*Math.PI*2-Math.PI/2;   // sunrise at t=0
   const elev=Math.sin(a);
   const day=Math.max(0,Math.min(1,elev*2.4+.25));
@@ -1548,24 +1662,43 @@ function loop(t){
   requestAnimationFrame(loop);
   const dt=Math.min(.05,(t-lastT)/1000||0);lastT=t;
   fAcc+=dt;fN++;if(fAcc>.5){fps=fN/fAcc;fAcc=0;fN=0;}
-  if(gameActive&&!invOpen){
+  const uiOpen=invOpen||player.dead||
+    !$('pause-screen').classList.contains('hidden')||
+    !$('settings-screen').classList.contains('hidden')||
+    !$('help-screen').classList.contains('hidden');
+  if(gameActive&&!uiOpen){
     // fixed-step physics
     stepPlayer(Math.min(dt,.033));
     // block actions (hold-to-repeat)
     actT-=dt;
     if(lDown||rDown){
-      if(actT<=0){
-        armSwing=1;
-        if(lDown){
-          const bh=raycastVoxel();
-          let bd=7;
-          if(bh)bd=camera.position.distanceTo(new THREE.Vector3(bh.x+.5,bh.y+.5,bh.z+.5));
-          const mob=raycastMobs(Math.min(bd,4));
-          if(mob)mob.hurt(2,player.pos);else breakBlock(bh);
-        }else placeBlock(raycastVoxel());
-        actT=lDown?.16:.22;
+      if(lDown){
+        const bh=raycastVoxel();
+        let bd=7;
+        if(bh)bd=camera.position.distanceTo(new THREE.Vector3(bh.x+.5,bh.y+.5,bh.z+.5));
+        const mob=raycastMobs(Math.min(bd,4));
+        if(mob){
+          if(actT<=0){armSwing=1;mob.hurt(2,player.pos);actT=.22;}
+          mining=null;hideProg();
+        }else if(gameMode==='survival'&&bh){
+          const bid=getBlock(bh.x,bh.y,bh.z);
+          const hard=blockHard(bid);
+          if(hard<0){mining=null;hideProg();}
+          else{
+            if(!mining||mining.x!==bh.x||mining.y!==bh.y||mining.z!==bh.z)
+              mining={x:bh.x,y:bh.y,z:bh.z,p:0};
+            mining.p+=dt/Math.max(.15,hard);
+            armSwing=Math.max(armSwing,.7);
+            setProg(mining.p);
+            if(mining.p>=1){breakBlock(bh);mining=null;hideProg();}
+          }
+        }else{
+          if(actT<=0){armSwing=1;breakBlock(bh);actT=.16;}
+          mining=null;hideProg();
+        }
       }
-    }else actT=0;
+      if(rDown&&actT<=0){armSwing=1;placeBlock(raycastVoxel());actT=.22;}
+    }else{actT=0;mining=null;hideProg();}
     const h=raycastVoxel();
     if(h){hlBox.visible=true;hlBox.position.set(h.x+.5,h.y+.5,h.z+.5);}
     else hlBox.visible=false;
@@ -1585,9 +1718,10 @@ function loop(t){
     }
     vitT-=dt;if(vitDirty||vitT<=0){updateVitals();vitDirty=false;vitT=.15;}
   }
+  const simOn=gameActive&&!uiOpen;
+  if(simOn){worldTime=(worldTime+dt/DAY_LEN)%1;updateTNT(dt);}
   ensureChunks(player.pos.x,player.pos.z);
   pumpQueues(2);
-  updateTNT(dt);
   updateParticles(dt);
   updateSky(dt);
   updateDebug();
@@ -1603,6 +1737,7 @@ initThree();
 initHL();
 initParticles();
 initArm();
+initCraft();
 loadSettings();
 initVitals();
 applySettings();

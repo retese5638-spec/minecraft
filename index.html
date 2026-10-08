@@ -116,6 +116,16 @@
   #seed-row { display:flex; gap:8px; margin-bottom:20px; }
   #seed-input { width:220px; padding:9px; font-family:inherit; font-size:15px;
     background:#1a1a1a; color:#eee; border:2px solid #555; }
+  #break-prog { position:absolute; bottom:118px; left:50%; transform:translateX(-50%);
+    width:130px; height:8px; border:2px solid #000; background:rgba(0,0,0,.55);
+    display:none; }
+  #break-prog-fill { height:100%; width:0%; background:#7cbd4b; }
+  #craft-row { display:flex; gap:18px; align-items:center; margin-bottom:14px; }
+  #craft-grid { display:grid; grid-template-columns:repeat(2,56px); gap:4px; }
+  #craft-arrow { font-size:28px; color:#ddd; font-weight:bold; }
+  .craft-title { font-size:12px; color:#aaa; margin-bottom:6px; letter-spacing:1px; }
+  #craft-out { background:#6b8b3f; }
+
   #toast { position:fixed; top:18px; left:50%; transform:translateX(-50%);
     z-index:60; background:rgba(0,0,0,.75); color:#ffe; padding:8px 22px;
     font-size:14px; border:1px solid #666; opacity:0; transition:opacity .4s; }
@@ -132,6 +142,7 @@
   <div id="hotbar"></div>
   <div id="debug" class="hidden"></div>
   <canvas id="vitals"></canvas>
+  <div id="break-prog"><div id="break-prog-fill"></div></div>
   <canvas id="arm"></canvas>
 </div>
 <div id="vignette-hurt"></div>
@@ -167,7 +178,7 @@
     <div class="controls-grid">
       <span class="key">W A S D</span><span>Hareket</span>
       <span class="key">Mouse</span><span>Etrafa bak</span>
-      <span class="key">Sol Tık</span><span>Blok kır / hayvana vur (TNT'yi ateşler!)</span>
+      <span class="key">Sol Tık</span><span>Kır / vur — hayatta kalmada basılı tut (TNT'yi ateşler!)</span>
       <span class="key">Sağ Tık</span><span>Blok koy</span>
       <span class="key">Orta Tık</span><span>Blok seç (pick block)</span>
       <span class="key">1-9 / Tekerlek</span><span>Hotbar slotu</span>
@@ -187,7 +198,23 @@
 
 <div id="inventory" class="overlay hidden">
   <div class="panel">
-    <h2>Envanter — bloğu seç, hotbar'a eklenir</h2>
+    <h2>Envanter</h2>
+    <div id="craft-row">
+      <div>
+        <div class="craft-title">ÜRETİM (2x2)</div>
+        <div id="craft-grid"></div>
+      </div>
+      <div id="craft-arrow">&#8594;</div>
+      <div>
+        <div class="craft-title">SONUÇ</div>
+        <div id="craft-out" class="inv-item"></div>
+      </div>
+      <div class="craft-title" style="max-width:180px">
+        Üretim slotuna tıkla: seçili hotbar bloğundan 1 koy / geri al<br><br>
+        Odun &#8594; 4 Tahta<br>4 Tahta &#8594; Çalışma Masası<br>4 Taş &#8594; 2 Tuğla
+      </div>
+    </div>
+    <div class="craft-title" style="margin-bottom:6px">BLOKLAR — tıkla: seçili hotbar slotuna koy</div>
     <div id="inv-grid"></div>
   </div>
 </div>
